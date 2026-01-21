@@ -1,0 +1,130 @@
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.btn,
+.btn-outline,
+.big-button,
+.compact-button,
+.control-button {
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+    box-shadow: var(--shadow);
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    }
+
+.btn,
+.btn-outline,
+.big-button {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.btn {
+    padding: 10px 20px;
+    font-size: 1rem;
+    flex: 1;
+}
+
+.btn-primary,
+.big-button {
+    background-color: var(--secondary);
+    color: white;
+}
+
+.big-button {
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    text-decoration: none;
+}
+
+
+.btn-outline {
+    background-color: white;
+    color: var(--secondary);
+    border: 2px solid var(--secondary);
+}
+
+.btn-outline:hover {
+    background: var(--light-hover);
+}
+
+.compact-button {
+    background-color: white;
+    color: var(--primary);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    flex: 0 0 auto;
+}
+
+.control-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px 0;
+    background: var(--light);
+    border-radius: 8px;
+    box-shadow: var(--narrow-shadow);
+}
+
+.control-button-group {
+    display: flex;
+    gap: 12px;
+}
+
+.control-button {
+    background-color: white;
+    color: var(--primary);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 1rem;
+}
+
+.btn-primary:hover,
+.big-button:hover {
+    background: var(--secondary-hover);
+    box-shadow: var(--shadow-hover);
+}
+
+.big-button:disabled {
+    background-color: var(--text-light);
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.big-button:disabled:hover {
+    background-color: var(--text-light);
+    transform: none;
+    box-shadow: none;
+}
+
+.btn:hover,
+.btn-outline:hover,
+.btn-primary:hover,
+.big-button:hover,
+.compact-button:hover,
+.control-button:hover {
+    transform: translateY(2px);
+}
+
+.control-button.active {
+    background: var(--secondary);
+    color: white;
+    box-shadow: var(--inset-shadow);
+}
+
+.control-button.active:hover {
+    background: var(--secondary-hover);
+}

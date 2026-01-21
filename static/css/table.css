@@ -1,0 +1,25 @@
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    border-spacing: 0;
+}
+
+th {
+    background-color: var(--primary);
+    color: var(--secondary-light);
+    font-weight: 600;
+    padding: 8px 15px;
+    position: sticky;
+    top: 0;
+    cursor: pointer;
+}
+
+tr.domain-table-row-hover td {
+    background-color: var(--secondary-light);
+    color: var(--text);
+}
+
+tr.domain-row-ignored td {
+    color: #d32f2f !important;
+}

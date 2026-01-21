@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <title>AlphaFragment</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/header-footer.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/button.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/collapsible-section.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/plots.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/plots-ignore.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/approve-controls.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/table.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+</head>
+<body>
+    <div id="header-placeholder"></div>
+    <div class="container">
+        <div class="main-content">
+            {% if protein_data_list %}
+            <h1 class="page-main-heading">Fragmentation report</h1>
+            <div style="margin-top: 12px; text-align: center; color: var(--text-light); font-size: 0.95rem;">
+                {% if fragmentation_report %}
+                <div>Proteins provided: {{ fragmentation_report.proteins_provided }}</div>
+                <div>Errors: {{ fragmentation_report.errors }}</div>
+                {% endif %}
+                {% if error %}
+                <div style="margin-top: 10px;">{{ error }}</div>
+                {% endif %}
+            </div>
+            {% else %}
+            <h1 class="page-main-heading">UniProt ID search</h1>
+            <div class="uniprot-id-search-box" style="margin-top: 20px; text-align: center;">
+                <form method="post" action="/fragment" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="new">
+                    <label for="uniprot_id" style="display: block; margin-bottom: 10px; font-size: 1.1rem;">UniProt ID(s):</label>
+                    <input type="text" id="uniprot_id" name="uniprot_id" placeholder="e.g. Q9VC64, P12345" style="width: 300px; padding: 10px; font-size: 1rem; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 4px;">
+
+                    <div style="margin-bottom: 20px;">
+                        <label for="protein_csv" style="display: block; margin-bottom: 10px; font-size: 1.0rem;">Or upload CSV:</label>
+                        <input type="file" id="protein_csv" name="protein_csv" accept=".csv,text/csv" style="width: 300px; padding: 6px; font-size: 0.95rem;">
+                    </div>
+
+                    <details style="margin-bottom: 20px;">
+                        <summary style="cursor: pointer; font-size: 0.9rem; color: var(--text-light);">change fragmentation parameters</summary>
+                        <div style="display: flex; flex-direction: column; gap: 12px; align-items: center; margin-top: 12px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-end;">
+                                <div style="min-width: 150px; text-align: left; font-size: 0.95rem; font-weight: 600;">Fragment length:</div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_min" style="font-size: 0.85rem; text-align: center;">Minimum</label>
+                                    <input type="number" id="fragment_len_min" name="fragment_len_min" min="1" step="1" value="{{ fragment_params.length.min }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_ideal" style="font-size: 0.85rem; text-align: center;">Ideal</label>
+                                    <input type="number" id="fragment_len_ideal" name="fragment_len_ideal" min="1" step="1" value="{{ fragment_params.length.ideal }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_max" style="font-size: 0.85rem; text-align: center;">Maximum</label>
+                                    <input type="number" id="fragment_len_max" name="fragment_len_max" min="1" step="1" value="{{ fragment_params.length.max }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-end;">
+                                <div style="min-width: 150px; text-align: left; font-size: 0.95rem; font-weight: 600;">Overlap length:</div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_min" style="font-size: 0.85rem; text-align: center;">Minimum</label>
+                                    <input type="number" id="overlap_len_min" name="overlap_len_min" min="0" step="1" value="{{ fragment_params.overlap.min }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_ideal" style="font-size: 0.85rem; text-align: center;">Ideal</label>
+                                    <input type="number" id="overlap_len_ideal" name="overlap_len_ideal" min="0" step="1" value="{{ fragment_params.overlap.ideal }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_max" style="font-size: 0.85rem; text-align: center;">Maximum</label>
+                                    <input type="number" id="overlap_len_max" name="overlap_len_max" min="0" step="1" value="{{ fragment_params.overlap.max }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                    <button type="submit" class="big-button">Fragment</button>
+                </form>
+                <div id="search-error-message" style="color: var(--text-light); margin-top: 10px; font-size: 0.9rem; min-height: 1.2em;">
+                    {% if error %}{{ error }}{% endif %}
+                </div>
+            </div>
+            {% endif %}
+            <div id="fragmentation-plot-container" style="margin-top: 40px;"></div>
+
+            {% if protein_data_list %}
+            <div class="uniprot-id-search-box" style="margin-top: 40px; text-align: center;">
+                <form id="refragment-form" method="post" action="/fragment" enctype="multipart/form-data">
+                    <input type="hidden" id="current_protein_data" name="current_protein_data" value='{{ protein_data_list|tojson|safe }}'>
+                    
+                    <details style="margin-bottom: 20px;">
+                        <summary style="cursor: pointer; font-size: 0.9rem; color: var(--text-light);">change fragmentation parameters</summary>
+                        <div style="display: flex; flex-direction: column; gap: 12px; align-items: center; margin-top: 12px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-end;">
+                                <div style="min-width: 150px; text-align: left; font-size: 0.95rem; font-weight: 600;">Fragment length:</div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_min_refrag" style="font-size: 0.85rem; text-align: center;">Minimum</label>
+                                    <input type="number" id="fragment_len_min_refrag" name="fragment_len_min" min="1" step="1" value="{{ fragment_params.length.min }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_ideal_refrag" style="font-size: 0.85rem; text-align: center;">Ideal</label>
+                                    <input type="number" id="fragment_len_ideal_refrag" name="fragment_len_ideal" min="1" step="1" value="{{ fragment_params.length.ideal }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="fragment_len_max_refrag" style="font-size: 0.85rem; text-align: center;">Maximum</label>
+                                    <input type="number" id="fragment_len_max_refrag" name="fragment_len_max" min="1" step="1" value="{{ fragment_params.length.max }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-end;">
+                                <div style="min-width: 150px; text-align: left; font-size: 0.95rem; font-weight: 600;">Overlap length:</div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_min_refrag" style="font-size: 0.85rem; text-align: center;">Minimum</label>
+                                    <input type="number" id="overlap_len_min_refrag" name="overlap_len_min" min="0" step="1" value="{{ fragment_params.overlap.min }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_ideal_refrag" style="font-size: 0.85rem; text-align: center;">Ideal</label>
+                                    <input type="number" id="overlap_len_ideal_refrag" name="overlap_len_ideal" min="0" step="1" value="{{ fragment_params.overlap.ideal }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                    <label for="overlap_len_max_refrag" style="font-size: 0.85rem; text-align: center;">Maximum</label>
+                                    <input type="number" id="overlap_len_max_refrag" name="overlap_len_max" min="0" step="1" value="{{ fragment_params.overlap.max }}" style="width: 64px; padding: 6px; font-size: 0.95rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;" required>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div style="margin-bottom: 18px;">
+                        <div class="action-buttons refragment-actions" style="justify-content: center; flex-wrap: wrap;">
+                            <button type="submit" id="refragment-unapproved-button" name="action" value="refragment_unapproved" class="big-button">Refragment unapproved proteins</button>
+                            <button type="submit" id="refragment-all-button" name="action" value="refragment_all" class="big-button">Refragment all</button>
+                        </div>
+
+                        <div style="margin-top: 14px;">
+                            <button type="submit" id="finish-generate-button" name="action" value="finish_generate" class="big-button" disabled>Finish and generate output files</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div id="footer-placeholder"></div>
+    <script type="module" src="{{ url_for('static', filename='js/header-footer.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/refragment-controls.js') }}"></script>
+    <script type="module">
+        import { initializeDomainFragmentPlots } from "{{ url_for('static', filename='js/fragmentation-plot.js') }}";
+        import { clearIgnoreState } from "{{ url_for('static', filename='js/domain-ignore-controls.js') }}";
+
+        {% if not fragmentation_report %}
+        // If we're on a fresh page load (not a re-render after calculation), clear ignore state?
+        // Actually, 'fragmentation_report' depends on 'protein_data_list'.
+        // If 'protein_data_list' is empty, we are on home page. 
+        // If we just submitted 'new', 'protein_data_list' is populated.
+        // We can't easily detect "New" vs "Refragment" here unless we inspect a flag?
+        // But app.py logic differentiates.
+        // Let's assume on the home page (no results yet), we clear state.
+        clearIgnoreState();
+        {% endif %}
+
+        // Expose fragmentation parameters for plot coloring
+        window.fragmentParams = {{ fragment_params|tojson|safe }};
+        {% if protein_data_list %}
+        // Prepare the data in the format expected by initializeDomainFragmentPlots
+        const proteins = {{ proteins|tojson|safe }};
+        const proteinDataMap = new Map();
+        {% for p in protein_data_list %}
+        proteinDataMap.set({{ p.name|tojson|safe }}, {
+            length: {{ p.length|tojson|safe }},
+            fragmentIndices: {{ p.fragmentIndices|tojson|safe }},
+            alphafoldDomains: {{ p.alphafoldDomains|tojson|safe }},
+            uniprotDomains: {{ p.uniprotDomains|tojson|safe }},
+            accessionId: {{ p.accessionId|tojson|safe }},
+            sequence: {{ p.sequence|tojson|safe }},
+            isApproved: {{ p.isApproved|default(false)|tojson|safe }}
+        });
+        {% endfor %}
+
+        // Expose data map for fragmentation-plot.js
+        window.proteinDataMap = proteinDataMap;
+
+        // Ensure the plot container exists and is empty
+        let plotContainer = document.getElementById('fragmentation-plot-container');
+        if (!plotContainer) {
+            plotContainer = document.createElement('div');
+            plotContainer.id = 'fragmentation-plot-container';
+            document.body.appendChild(plotContainer);
+        }
+
+        // Create a child container for the plots (matches expected API)
+        let plotsDiv = document.getElementById('domain-fragment-plots-container');
+        if (!plotsDiv) {
+            plotsDiv = document.createElement('div');
+            plotsDiv.id = 'domain-fragment-plots-container';
+            plotContainer.appendChild(plotsDiv);
+        } else {
+            plotsDiv.innerHTML = '';
+        }
+
+        initializeDomainFragmentPlots({ proteins });
+        {% endif %}
+    </script>
+</body>
+</html>

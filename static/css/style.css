@@ -1,0 +1,83 @@
+:root {
+    --primary: #2c3e50;
+    --secondary: #3498db;
+    --secondary-hover: #2980b9;
+    --secondary-light: #b3e0ff;
+    --accent: #1abc9c;
+    --background: #e9ecef;
+    --light: #f8f9fa;
+    --light-border: 1px solid #ddd;
+    --light-hover: #e2e6ea;
+    --soft-border: 2px solid #f8f9fa;
+    --table-row-hover: #e9f7fe;
+    --dark: #34495e;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+    --success: #27ae60;
+    --warning: #f39c12;
+    --danger: #e74c3c;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-hover: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+    --inset-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    --narrow-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
+
+body {
+    background: var(--background);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 0 20px;
+    flex-grow: 1;
+}
+
+.main-content,
+.grid {
+    gap: 25px;
+    padding: 5px 0;
+}
+
+
+.section-title,
+.page-main-heading {
+    color: var(--primary);
+}
+
+.section-title {
+    font-size: 1.8rem;
+    margin-bottom: 25px;
+    padding: 15px;
+    border-bottom: 2px solid var(--light);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.page-main-heading {
+    font-size: 2.5rem;
+    text-align: center;
+    margin: 10px 0 5px 0;
+}
+
+.page-subtitle {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--text);
+    margin: 0 0 10px 0;
+    font-weight: normal;
+}

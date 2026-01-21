@@ -1,0 +1,35 @@
+/* plots.css additions for domain ignore popup and ignored domains */
+.domain-ignore-popup {
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  padding: 8px 0;
+  min-width: 180px;
+  font-size: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.domain-ignore-popup button {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 8px 16px;
+  width: 100%;
+  cursor: pointer;
+  font-size: 15px;
+  color: #333;
+  transition: background 0.15s;
+}
+.domain-ignore-popup button:hover {
+  background: #f0f0f0;
+}
+
+/* Ignored domain styling */
+.domain-ignored {
+  fill: #bdbdbd !important;
+  stroke: #888 !important;
+}
+
+/* Red label text on hover for ignored domains (applied inline in JS) */
