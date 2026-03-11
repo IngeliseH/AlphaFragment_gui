@@ -1,0 +1,4 @@
+# Web app requirements for interactive protein fragmentation
+flask
+plotly
+pandas

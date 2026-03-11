@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <title>AlphaFragment &mdash; Download CSV</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/header-footer.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/button.css') }}">
+</head>
+<body>
+    <div id="header-placeholder"></div>
+    <div class="container">
+        <div class="main-content" style="text-align: center; margin-top: 40px;">
+            <h1 class="page-main-heading">Fragmentation results</h1>
+
+            {% if error %}
+            <p style="color: var(--text-light); margin-top: 12px;">{{ error }}</p>
+            {% endif %}
+
+            {% if csv_available %}
+            <p style="margin-top: 20px;">Your fragment CSV is ready to download.</p>
+            <a href="{{ url_for('download_fragments_csv') }}" class="big-button" style="margin-top: 20px; display: inline-block;">Download fragment csv</a>
+            {% else %}
+
+            <p style="margin-top: 20px;">No fragment CSV is currently available.</p>
+            {% endif %}
+
+            {% if csv_available %}
+                {% if fastas_available %}
+                <p style="margin-top: 20px;">Your FASTA fragment folder is ready to download.</p>
+                <a href="{{ url_for('download_fastas_zip') }}" class="big-button" style="margin-top: 20px; display: inline-block;">Download FASTA folder (zip)</a>
+                {% else %}
+                <p style="margin-top: 20px;">You can generate a folder of FASTA files for all fragment combinations.</p>
+                <form method="post" action="{{ url_for('generate_fastas') }}" style="margin-top: 20px;">
+                    <button type="submit" class="big-button">Generate FASTA folder</button>
+                </form>
+                {% endif %}
+            {% endif %}
+
+            <div style="margin-top: 30px;">
+                <a href="{{ url_for('index') }}" class="big-button">Back to search</a>
+            </div>
+        </div>
+    </div>
+    <div id="footer-placeholder"></div>
+    <script type="module" src="{{ url_for('static', filename='js/header-footer.js') }}"></script>
+</body>
+</html>

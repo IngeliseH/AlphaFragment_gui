@@ -2,8 +2,10 @@ import re
 import os
 import tempfile
 import json
+import shutil
+import pickle
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 
 # Import AlphaFragment modules
@@ -11,6 +13,8 @@ from alphafragment.classes import Protein, Domain
 from alphafragment.uniprot_fetch import fetch_uniprot_info
 from alphafragment.domain_compilation import compile_domains
 from alphafragment.fragment_protein import fragment_protein
+from alphafragment.process_proteins_csv import update_csv_with_fragments
+from alphafragment.fragment_file_creation import output_fastas
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB
@@ -226,16 +230,6 @@ def _attach_domains_from_entry(protein: Protein, entry: dict) -> None:
                  # clean up potential JS keys if we want consistency
                  if 'toBeIgnored' in d: del d['toBeIgnored']
             
-            # 2. currently_ignored -> stays currently_ignored (unless unignored separately, handled by absence of flag?)
-            # The JS should have set to_be_ignored=False if it was unignored, but currently_ignored might persist?
-            # User requirement: "'currently ignored' is when it was 'to be ignored' and has now been refragmented"
-            # If the user UN-ignores a currently_ignored domain, JS should ideally clear currently_ignored?
-            # For now, let's assume 'currently_ignored' means it's OUT of the fragmentation pool.
-            
-            if d.get('currently_ignored'):
-                # This domain is ignored. Do not yield it for the Protein object.
-                continue
-
             raw_start = d.get('start', None)
             raw_end = d.get('end', None)
             try:
@@ -248,8 +242,18 @@ def _attach_domains_from_entry(protein: Protein, entry: dict) -> None:
             domain_id = d.get('id', None)
             domain_type = d.get('type', None) or fallback_type
             
-            # Only yield active domains
-            yield GuiDomain(identifier=domain_id, start=start, end=end, domain_type=domain_type, to_be_ignored=False, currently_ignored=False)
+            # Respect current ignore flags from the entry when attaching.
+            currently_ignored_flag = bool(d.get('currently_ignored'))
+            to_be_ignored_flag = bool(d.get('to_be_ignored'))
+
+            yield GuiDomain(
+                identifier=domain_id,
+                start=start,
+                end=end,
+                domain_type=domain_type,
+                to_be_ignored=to_be_ignored_flag,
+                currently_ignored=currently_ignored_flag,
+            )
 
     domains = []
     domains.extend(list(_process_domains(entry.get('alphafoldDomains'), fallback_type='af')))
@@ -290,6 +294,7 @@ def index():
 
 @app.route('/fragment', methods=['POST'])
 def fragment():
+    original_csv_rows = None
     try:
         length_params, overlap_params = _parse_fragmentation_params(request.form)
     except Exception as e:
@@ -310,7 +315,18 @@ def fragment():
                     'max': request.form.get('overlap_len_max', DEFAULT_FRAGMENT_PARAMS['overlap']['max']),
                 },
             },
+            original_csv_rows=original_csv_rows,
         )
+
+    # If this is a refragmentation request, we may receive the original CSV
+    # as JSON records in a hidden form field so it can be reused client-side.
+    csv_rows_raw = request.form.get('original_csv_rows', '')
+    if csv_rows_raw.strip():
+        try:
+            original_csv_rows = json.loads(csv_rows_raw)
+        except Exception as e:
+            print(f"[DEBUG] Could not parse original_csv_rows: {e}")
+            original_csv_rows = None
 
     action = (request.form.get('action') or 'new').strip().lower()
     print(f"[DEBUG] Parsed action: {action}")
@@ -331,6 +347,7 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
+                original_csv_rows=original_csv_rows,
             )
 
         try:
@@ -346,24 +363,12 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
-            )
-
-        if action == 'finish_generate':
-            # Placeholder until output-file generation is implemented.
-            return render_template(
-                'index.html',
-                error="Finish and generate output files is not implemented yet.",
-                protein_data_list=current_list,
-                proteins=[(p.get('name') or p.get('accessionId') or 'protein') if isinstance(p, dict) else 'protein' for p in current_list],
-                fragment_params={'length': length_params, 'overlap': overlap_params},
-                fragmentation_report=_compute_fragmentation_report(
-                    proteins_provided=len(current_list),
-                    protein_data_list=[p for p in current_list if isinstance(p, dict)],
-                ),
+                original_csv_rows=original_csv_rows,
             )
 
         protein_data_list: list[dict] = []
         errors: list[str] = []
+        proteins_for_csv: list[Protein] = []
 
         # No longer using separate approved_indices list; isApproved is now a property of the protein object.
 
@@ -391,9 +396,28 @@ def fragment():
                 protein = Protein(name=safe_name, accession_id=accession or '', sequence=sequence)
                 _attach_domains_from_entry(protein, entry)
                 print(f"[DEBUG] {safe_name}: alphafoldDomains={len(entry.get('alphafoldDomains', []))}, uniprotDomains={len(entry.get('uniprotDomains', []))}")
+                # For fragmentation, use only domains that are not currently ignored,
+                # but keep the full domain_list (including ignored ones) on the
+                # Protein object so they are preserved for CSV export.
+                all_domains = list(getattr(protein, 'domain_list', []) or [])
+                active_domains = [
+                    d for d in all_domains
+                    if not getattr(d, 'currently_ignored', False)
+                ]
+                setattr(protein, 'domain_list', active_domains)
+
                 fragments = fragment_protein(protein, length=length_params.copy(), overlap=overlap_params.copy())
+                for f in fragments:
+                    # Keep Protein.fragment_list in sync for CSV export
+                    if hasattr(protein, 'add_fragment'):
+                        protein.add_fragment(f)
+                # Restore full domain list (including currently ignored) for CSV
+                setattr(protein, 'domain_list', all_domains)
                 fragment_indices = [[int(f[0]) + 1, int(f[1]) + 1] for f in fragments]
                 print(f"[DEBUG] {safe_name}: fragmentIndices={fragment_indices}")
+
+                # Collect for optional CSV export
+                proteins_for_csv.append(protein)
 
                 updated = {
                     **entry,
@@ -409,6 +433,89 @@ def fragment():
                     label = entry.get('name') or entry.get('accessionId')
                 errors.append(f"{label or 'protein'}: {e}")
 
+        # If the user requested final output, generate a CSV file
+        if action == 'finish_generate':
+            import pandas as pd
+
+            if original_csv_rows:
+                df = pd.DataFrame(original_csv_rows)
+            else:
+                # Fallback: construct a minimal DataFrame from the current list
+                rows = []
+                for entry in current_list:
+                    if not isinstance(entry, dict):
+                        continue
+                    rows.append({
+                        'name': entry.get('name') or entry.get('accessionId') or 'protein',
+                        'accession_id': entry.get('accessionId') or '',
+                    })
+                df = pd.DataFrame(rows)
+
+            # Use a deterministic temporary file path so it can be downloaded later
+            output_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fragments.csv')
+
+            # Add an extra column that contains only the domains actually used
+            # in fragmentation (i.e. those that are not currently ignored).
+            try:
+                domains_used_dict = {}
+                for protein in proteins_for_csv:
+                    domain_list = getattr(protein, 'domain_list', None)
+                    if domain_list:
+                        domain_counts = {}
+                        domain_entries = []
+                        for domain in domain_list:
+                            if getattr(domain, 'currently_ignored', False):
+                                # Skip domains that were marked as currently ignored
+                                # when computing "used for fragmentation".
+                                continue
+                            domain_id = domain.id
+                            # Handle duplicate domain IDs by appending a counter
+                            domain_counts[domain_id] = domain_counts.get(domain_id, 0) + 1
+                            count = domain_counts[domain_id]
+                            if count > 1:
+                                domain_id = f"{domain_id}_{count}"
+                            domain_entry = f"('{domain_id}', ({domain.start + 1}, {domain.end + 1}))"
+                            domain_entries.append(domain_entry)
+                        domains_str = '[' + ', '.join(domain_entries) + ']'
+                        domains_used_dict[protein.name] = domains_str
+                    else:
+                        domains_used_dict[protein.name] = ''
+
+                if 'name' in df.columns:
+                    df['domains_used_for_fragmentation'] = df['name'].map(domains_used_dict)
+            except Exception as e:
+                print(f"[DEBUG] Failed to compute domains_used_for_fragmentation column: {e}")
+
+            try:
+                update_csv_with_fragments(df, output_path, proteins_for_csv)
+            except Exception as e:
+                print(f"[DEBUG] Failed to generate CSV via update_csv_with_fragments: {e}")
+                # Fall back to rendering the page with an error
+                fragmentation_report = _compute_fragmentation_report(
+                    proteins_provided=len(current_list),
+                    protein_data_list=protein_data_list,
+                )
+                return render_template(
+                    'index.html',
+                    error=f"Failed to generate CSV: {e}",
+                    protein_data_list=protein_data_list,
+                    proteins=[(p.get('name') or p.get('accessionId') or 'protein') for p in protein_data_list],
+                    fragment_params={'length': length_params, 'overlap': overlap_params},
+                    fragmentation_report=fragmentation_report,
+                    original_csv_rows=original_csv_rows,
+                )
+
+            # Persist proteins so FASTA files can be generated later on demand.
+            proteins_pickle_path = os.path.join(tempfile.gettempdir(), 'alphafragment_proteins_for_fastas.pkl')
+            try:
+                with open(proteins_pickle_path, 'wb') as f:
+                    pickle.dump(proteins_for_csv, f)
+            except Exception as e:
+                print(f"[DEBUG] Failed to persist proteins_for_fastas: {e}")
+
+            # CSV has been generated; redirect to a dedicated download page
+            return redirect(url_for('fragments_ready'))
+
         fragmentation_report = _compute_fragmentation_report(
             proteins_provided=len(current_list),
             protein_data_list=protein_data_list,
@@ -422,6 +529,7 @@ def fragment():
             proteins=[(p.get('name') or p.get('accessionId') or 'protein') for p in protein_data_list],
             fragment_params={'length': length_params, 'overlap': overlap_params},
             fragmentation_report=fragmentation_report,
+            original_csv_rows=original_csv_rows,
         )
 
     uploaded_csv = request.files.get('protein_csv')
@@ -439,6 +547,7 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
+                original_csv_rows=original_csv_rows,
             )
 
         try:
@@ -450,6 +559,7 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
+                original_csv_rows=original_csv_rows,
             )
 
         tmp_path = None
@@ -464,6 +574,14 @@ def fragment():
             except Exception:
                 proteins_provided = 0
             init_failures = max(0, proteins_provided - len(proteins_from_csv))
+
+            # Convert the full CSV DataFrame to a list-of-dicts so it can be
+            # serialized to JSON and stored client-side for later use.
+            try:
+                original_csv_rows = _df.to_dict(orient='records')
+            except Exception as e:
+                print(f"[DEBUG] Could not convert CSV DataFrame to dict records: {e}")
+                original_csv_rows = None
         except Exception as e:
             return render_template(
                 'index.html',
@@ -471,6 +589,7 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
+                original_csv_rows=original_csv_rows,
             )
         finally:
             if tmp_path and os.path.exists(tmp_path):
@@ -486,6 +605,7 @@ def fragment():
                 protein_data_list=None,
                 proteins=None,
                 fragment_params={'length': length_params, 'overlap': overlap_params},
+                original_csv_rows=original_csv_rows,
             )
 
     raw_uniprot_ids = request.form.get('uniprot_id', '')
@@ -498,6 +618,7 @@ def fragment():
             protein_data_list=None,
             proteins=None,
             fragment_params={'length': length_params, 'overlap': overlap_params},
+            original_csv_rows=original_csv_rows,
         )
 
     protein_data_list = []
@@ -544,6 +665,7 @@ def fragment():
             protein_data_list=None,
             proteins=None,
             fragment_params={'length': length_params, 'overlap': overlap_params},
+            original_csv_rows=original_csv_rows,
         )
 
     fragmentation_report = _compute_fragmentation_report(
@@ -558,6 +680,140 @@ def fragment():
         proteins=[p['name'] for p in protein_data_list],
         fragment_params={'length': length_params, 'overlap': overlap_params},
         fragmentation_report=fragmentation_report,
+        original_csv_rows=original_csv_rows,
+    )
+
+@app.route('/fragments_ready', methods=['GET'])
+def fragments_ready():
+    """Show a page with a link to download the fragments CSV if available."""
+    output_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fragments.csv')
+    csv_available = os.path.exists(output_path)
+
+    fastas_zip_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fastas.zip')
+    fastas_available = os.path.exists(fastas_zip_path)
+    return render_template(
+        'fragments_ready.html',
+        csv_available=csv_available,
+        fastas_available=fastas_available,
+    )
+
+
+@app.route('/generate_fastas', methods=['POST'])
+def generate_fastas():
+    """Generate FASTA files and a zip archive on demand after CSV creation."""
+    csv_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fragments.csv')
+    fastas_root = os.path.join(tempfile.gettempdir(), 'alphafragment_fastas')
+    fastas_zip_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fastas.zip')
+    proteins_pickle_path = os.path.join(tempfile.gettempdir(), 'alphafragment_proteins_for_fastas.pkl')
+
+    csv_available = os.path.exists(csv_path)
+
+    if not csv_available:
+        # Cannot generate FASTAs without a CSV run first
+        return render_template(
+            'fragments_ready.html',
+            csv_available=False,
+            fastas_available=False,
+            error="Please generate the fragment CSV before creating FASTA files.",
+        )
+
+    # Load persisted proteins
+    if not os.path.exists(proteins_pickle_path):
+        return render_template(
+            'fragments_ready.html',
+            csv_available=csv_available,
+            fastas_available=False,
+            error="Protein data for FASTA generation is not available. Please rerun fragmentation.",
+        )
+
+    try:
+        with open(proteins_pickle_path, 'rb') as f:
+            proteins_for_fastas = pickle.load(f)
+    except Exception as e:
+        print(f"[DEBUG] Failed to load proteins_for_fastas: {e}")
+        return render_template(
+            'fragments_ready.html',
+            csv_available=csv_available,
+            fastas_available=False,
+            error="Could not load protein data for FASTA generation.",
+        )
+
+    try:
+        # Clean previous FASTA outputs
+        if os.path.exists(fastas_root):
+            shutil.rmtree(fastas_root)
+        if os.path.exists(fastas_zip_path):
+            os.remove(fastas_zip_path)
+
+        os.makedirs(fastas_root, exist_ok=True)
+
+        # Generate FASTA files
+        output_fastas(proteins_for_fastas, save_location=fastas_root, method='all')
+
+        # Zip the folder
+        shutil.make_archive(
+            base_name=os.path.splitext(fastas_zip_path)[0],
+            format='zip',
+            root_dir=fastas_root,
+        )
+    except Exception as e:
+        print(f"[DEBUG] Error during FASTA generation: {e}")
+        return render_template(
+            'fragments_ready.html',
+            csv_available=csv_available,
+            fastas_available=False,
+            error="Failed to generate FASTA files. Check server logs for details.",
+        )
+
+    # On success, show page with both CSV and FASTA downloads available
+    return render_template(
+        'fragments_ready.html',
+        csv_available=True,
+        fastas_available=True,
+    )
+
+
+@app.route('/download_fragments_csv', methods=['GET'])
+def download_fragments_csv():
+    """Serve the most recently generated fragments CSV, if available."""
+    output_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fragments.csv')
+    if not os.path.exists(output_path):
+        # No CSV has been generated yet; send back to the ready page with a message
+        fastas_zip_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fastas.zip')
+        return render_template(
+            'fragments_ready.html',
+            csv_available=False,
+            fastas_available=os.path.exists(fastas_zip_path),
+            error="No fragment CSV is available to download yet.",
+        )
+
+    return send_file(
+        output_path,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name='alphafragment_fragments.csv',
+    )
+
+
+@app.route('/download_fastas_zip', methods=['GET'])
+def download_fastas_zip():
+    """Serve a zip archive containing FASTA files for fragment pairs."""
+    fastas_zip_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fastas.zip')
+    csv_path = os.path.join(tempfile.gettempdir(), 'alphafragment_fragments.csv')
+
+    if not os.path.exists(fastas_zip_path):
+        return render_template(
+            'fragments_ready.html',
+            csv_available=os.path.exists(csv_path),
+            fastas_available=False,
+            error="No FASTA archive is available to download yet.",
+        )
+
+    return send_file(
+        fastas_zip_path,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='alphafragment_fastas.zip',
     )
 
 if __name__ == '__main__':

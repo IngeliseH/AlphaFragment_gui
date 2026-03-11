@@ -27,6 +27,9 @@
                 <div>Proteins provided: {{ fragmentation_report.proteins_provided }}</div>
                 <div>Errors: {{ fragmentation_report.errors }}</div>
                 {% endif %}
+                <div id="approval-counts" style="margin-top: 6px; font-weight: 600; color: var(--text-dark);">
+                    <!-- Counts will be updated by JS -->
+                </div>
                 {% if error %}
                 <div style="margin-top: 10px;">{{ error }}</div>
                 {% endif %}
@@ -93,6 +96,9 @@
             <div class="uniprot-id-search-box" style="margin-top: 40px; text-align: center;">
                 <form id="refragment-form" method="post" action="/fragment" enctype="multipart/form-data">
                     <input type="hidden" id="current_protein_data" name="current_protein_data" value='{{ protein_data_list|tojson|safe }}'>
+                    {% if original_csv_rows %}
+                    <input type="hidden" id="original_csv_rows" name="original_csv_rows" value='{{ original_csv_rows|tojson|safe }}'>
+                    {% endif %}
                     
                     <details style="margin-bottom: 20px;">
                         <summary style="cursor: pointer; font-size: 0.9rem; color: var(--text-light);">change fragmentation parameters</summary>
@@ -167,6 +173,10 @@
 
         // Expose fragmentation parameters for plot coloring
         window.fragmentParams = {{ fragment_params|tojson|safe }};
+    {% if original_csv_rows %}
+    // Full CSV content (each row as a dict) from the uploaded file
+    window.originalCsvRows = {{ original_csv_rows|tojson|safe }};
+    {% endif %}
         {% if protein_data_list %}
         // Prepare the data in the format expected by initializeDomainFragmentPlots
         const proteins = {{ proteins|tojson|safe }};
@@ -205,6 +215,27 @@
         }
 
         initializeDomainFragmentPlots({ proteins });
+
+        function updateApprovalCounts() {
+            const el = document.getElementById('approval-counts');
+            if (!el || !window._plotInstances) return;
+            
+            const instances = Object.values(window._plotInstances);
+            const total = instances.length;
+            const approvedCount = instances.filter(i => i.isApproved).length;
+            const unapprovedCount = total - approvedCount;
+            
+            el.textContent = `Approved: ${approvedCount} / Unapproved: ${unapprovedCount}`;
+        }
+
+        // Update when user toggles checkboxes
+        document.addEventListener('approvalstatechange', updateApprovalCounts);
+        
+        // Update when plots are fully loaded
+        document.addEventListener('plotinstancesready', updateApprovalCounts);
+
+        // Initial check
+        updateApprovalCounts();
         {% endif %}
     </script>
 </body>
